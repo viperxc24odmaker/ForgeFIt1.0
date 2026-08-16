@@ -49,10 +49,16 @@ class WorkoutAiService @Inject constructor(
             val json = response.choices.firstOrNull()?.message?.content
                 ?: return Result.failure(Exception("Empty response from AI"))
 
-            val workoutData = gson.fromJson(json, WorkoutJsonData::class.java)
+            val cleanJson = extractJson(json)
+            val workoutData = gson.fromJson(cleanJson, WorkoutJsonData::class.java)
+                ?: return Result.failure(Exception("AI returned malformed workout data"))
+            val parsedExercises = workoutData.exercises
+            if (parsedExercises.isNullOrEmpty()) {
+                return Result.failure(Exception("AI returned no exercises. Try again."))
+            }
             val workout = Workout(
                 title = workoutData.title,
-                exercises = workoutData.exercises.map { ex ->
+                exercises = parsedExercises.map { ex ->
                     Exercise(
                         name = ex.name,
                         sets = ex.sets,
@@ -66,7 +72,7 @@ class WorkoutAiService @Inject constructor(
             )
             Result.success(workout)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(describeError(e)))
         }
     }
 
@@ -103,10 +109,41 @@ class WorkoutAiService @Inject constructor(
     }
 }
 
+
+/** Turns opaque HTTP failures into something readable on screen. */
+private fun describeError(e: Exception): String {
+    if (e is retrofit2.HttpException) {
+        val body = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
+        val hint = when (e.code()) {
+            401 -> "Invalid or missing API key."
+            402 -> "OpenRouter account needs credits for this model."
+            404 -> "Model not found - it may have been delisted."
+            429 -> "Rate limited (free tier: 20/min, 200/day). Wait and retry."
+            else -> "Request failed."
+        }
+        return "HTTP ${e.code()}: $hint" + if (!body.isNullOrBlank()) " ${body.take(180)}" else ""
+    }
+    if (e is java.io.IOException) return "Network error - check your connection."
+    return e.message ?: "Unknown error"
+}
+
+/** Strips markdown fences / stray prose so Gson only ever sees the JSON object. */
+private fun extractJson(raw: String): String {
+    var s = raw.trim()
+    if (s.startsWith("```")) {
+        s = s.removePrefix("```json").removePrefix("```").trim()
+        val end = s.lastIndexOf("```")
+        if (end != -1) s = s.substring(0, end).trim()
+    }
+    val start = s.indexOf('{')
+    val close = s.lastIndexOf('}')
+    return if (start != -1 && close > start) s.substring(start, close + 1) else s
+}
+
 private data class WorkoutJsonData(
     val title: String,
     val durationMinutes: Int,
-    val exercises: List<ExerciseJsonData>
+    val exercises: List<ExerciseJsonData>?
 )
 
 private data class ExerciseJsonData(

@@ -12,7 +12,7 @@ interface OpenRouterApiService {
 }
 
 data class OpenRouterRequest(
-    val model: String = "meta-llama/llama-3.3-70b-instruct:free",
+    val model: String = "openrouter/free",
     val messages: List<OpenRouterMessage>,
     val max_tokens: Int = 2048
 )
