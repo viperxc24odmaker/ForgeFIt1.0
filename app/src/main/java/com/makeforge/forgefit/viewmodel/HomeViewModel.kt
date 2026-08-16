@@ -2,70 +2,62 @@ package com.makeforge.forgefit.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.makeforge.forgefit.data.repository.UserPreferencesRepository
 import com.makeforge.forgefit.domain.model.*
 import com.makeforge.forgefit.network.WorkoutAiService
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val workoutAiService: WorkoutAiService
+    private val workoutAiService: WorkoutAiService,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    // TODO: Load from DataStore
-    private val mockProfile = UserProfile(
-        name = "Divine",
-        age = 17,
-        weightKg = 70f,
-        goal = FitnessGoal.BUILD_MUSCLE,
-        fitnessLevel = FitnessLevel.BEGINNER,
-        availableEquipment = listOf(Equipment.NONE),
-        jackedScore = 420,
-        totalSessions = 12,
-        currentStreak = 3
-    )
-
     init {
-        loadHomeData()
+        viewModelScope.launch {
+            userPreferencesRepository.userProfile.collect { profile ->
+                _uiState.update { it.copy(profile = profile) }
+                if (profile.name.isNotEmpty() && _uiState.value.motivationalMessage.isEmpty()) {
+                    loadMotivation(profile)
+                }
+            }
+        }
     }
 
-    fun loadHomeData() {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-            val motResult = workoutAiService.getMotivationalMessage(mockProfile)
-            _uiState.value = _uiState.value.copy(
-                profile = mockProfile,
-                motivationalMessage = motResult.getOrNull() ?: "TIME TO GET JACKED.",
-                isLoading = false
-            )
-        }
+    private suspend fun loadMotivation(profile: UserProfile) {
+        val result = workoutAiService.getMotivationalMessage(profile)
+        _uiState.update { it.copy(motivationalMessage = result.getOrNull() ?: "TIME TO GET JACKED.") }
     }
 
     fun generateTodayWorkout() {
+        val profile = _uiState.value.profile
+        if (profile.name.isEmpty()) return
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isGeneratingWorkout = true)
-            val result = workoutAiService.generateWorkout(mockProfile)
-            _uiState.value = _uiState.value.copy(
-                todayWorkout = result.getOrNull(),
-                isGeneratingWorkout = false,
-                error = result.exceptionOrNull()?.message
-            )
+            _uiState.update { it.copy(isGeneratingWorkout = true, error = null) }
+            val result = workoutAiService.generateWorkout(profile)
+            _uiState.update {
+                it.copy(
+                    todayWorkout = result.getOrNull(),
+                    isGeneratingWorkout = false,
+                    error = result.exceptionOrNull()?.message
+                )
+            }
         }
     }
+
+    fun clearError() = _uiState.update { it.copy(error = null) }
 }
 
 data class HomeUiState(
     val profile: UserProfile = UserProfile(),
     val todayWorkout: Workout? = null,
     val motivationalMessage: String = "",
-    val isLoading: Boolean = false,
     val isGeneratingWorkout: Boolean = false,
     val error: String? = null
 )
