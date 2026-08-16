@@ -1,0 +1,4 @@
+-keep class com.makeforge.forgefit.network.** { *; }
+-keep class com.makeforge.forgefit.domain.model.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
