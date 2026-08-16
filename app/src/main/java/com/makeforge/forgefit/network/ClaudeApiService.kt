@@ -12,7 +12,7 @@ interface OpenRouterApiService {
 }
 
 data class OpenRouterRequest(
-    val model: String = "google/gemini-2.5-flash",
+    val model: String = "meta-llama/llama-3.3-70b-instruct:free",
     val messages: List<OpenRouterMessage>,
     val max_tokens: Int = 2048
 )
