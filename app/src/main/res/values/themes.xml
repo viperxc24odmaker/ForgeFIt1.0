@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.ForgeFit" parent="android:Theme.Material.NoTitleBar">
+    <style name="Theme.ForgeFit" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/black</item>
