@@ -63,10 +63,16 @@ object AppModule {
             context,
             ForgeFitDatabase::class.java,
             "forgefit.db"
-        ).build()
+        )
+            .addMigrations(ForgeFitDatabase.MIGRATION_1_2)
+            .build()
     }
 
     @Provides
     @Singleton
     fun provideWorkoutDao(db: ForgeFitDatabase) = db.workoutDao()
+
+    @Provides
+    @Singleton
+    fun provideJogDao(db: ForgeFitDatabase) = db.jogDao()
 }

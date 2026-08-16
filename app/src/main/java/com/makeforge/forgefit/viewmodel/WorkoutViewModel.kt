@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.makeforge.forgefit.data.repository.UserPreferencesRepository
 import com.makeforge.forgefit.data.repository.WorkoutRepository
+import com.makeforge.forgefit.domain.ActiveWorkoutHolder
 import com.makeforge.forgefit.domain.model.Workout
 import com.makeforge.forgefit.domain.model.WorkoutSession
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,46 +19,75 @@ import javax.inject.Inject
 @HiltViewModel
 class WorkoutViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    activeWorkoutHolder: ActiveWorkoutHolder
 ) : ViewModel() {
 
     private val _session = MutableStateFlow<WorkoutSession?>(null)
     val session: StateFlow<WorkoutSession?> = _session.asStateFlow()
 
-    private val _isFinished = MutableStateFlow(false)
-    val isFinished: StateFlow<Boolean> = _isFinished.asStateFlow()
+    private val _summary = MutableStateFlow<WorkoutSummary?>(null)
+    val summary: StateFlow<WorkoutSummary?> = _summary.asStateFlow()
 
     private var restTimerJob: Job? = null
     private var savedWorkoutId: Long = -1L
 
-    fun startWorkout(workout: Workout) {
+    init {
+        // Pick up the workout handed over by the Home screen.
+        activeWorkoutHolder.consume()?.let { startWorkout(it) }
+    }
+
+    private fun startWorkout(workout: Workout) {
+        _session.value = WorkoutSession(workout = workout)
+        _summary.value = null
         viewModelScope.launch {
             savedWorkoutId = workoutRepository.saveWorkout(workout)
-            _session.value = WorkoutSession(workout = workout)
-            _isFinished.value = false
         }
     }
 
-    fun completeExercise() {
+    /** Called when the user finishes the current SET (not the whole exercise). */
+    fun completeSet() {
         val current = _session.value ?: return
-        val exercise = current.workout.exercises[current.currentExerciseIndex]
-        startRestTimer(exercise.restSeconds)
-    }
+        val exercise = current.currentExercise
+        val isLastSet = current.currentSet >= exercise.sets
+        val isLastExercise = current.currentExerciseIndex >= current.workout.exercises.size - 1
 
-    fun nextExercise() {
-        val current = _session.value ?: return
-        restTimerJob?.cancel()
-        val nextIndex = current.currentExerciseIndex + 1
-        if (nextIndex < current.workout.exercises.size) {
-            _session.value = current.copy(currentExerciseIndex = nextIndex, isResting = false, restSecondsLeft = 0)
-        } else {
+        if (isLastSet && isLastExercise) {
             finishWorkout()
+        } else {
+            startRestTimer(exercise.restSeconds)
         }
     }
 
     fun skipRest() {
         restTimerJob?.cancel()
-        nextExercise()
+        advance()
+    }
+
+    private fun advance() {
+        val current = _session.value ?: return
+        val exercise = current.currentExercise
+
+        if (current.currentSet < exercise.sets) {
+            // Next set of the same exercise
+            _session.value = current.copy(
+                currentSet = current.currentSet + 1,
+                isResting = false,
+                restSecondsLeft = 0
+            )
+        } else {
+            val nextIndex = current.currentExerciseIndex + 1
+            if (nextIndex < current.workout.exercises.size) {
+                _session.value = current.copy(
+                    currentExerciseIndex = nextIndex,
+                    currentSet = 1,
+                    isResting = false,
+                    restSecondsLeft = 0
+                )
+            } else {
+                finishWorkout()
+            }
+        }
     }
 
     private fun startRestTimer(seconds: Int) {
@@ -68,20 +98,45 @@ class WorkoutViewModel @Inject constructor(
                 _session.value = _session.value?.copy(restSecondsLeft = i)
                 delay(1000)
             }
-            nextExercise()
+            advance()
         }
     }
 
+    fun quitWorkout() {
+        restTimerJob?.cancel()
+        _session.value = null
+    }
+
     private fun finishWorkout() {
+        restTimerJob?.cancel()
+        val current = _session.value ?: return
+
+        // Capture the totals BEFORE clearing the session, otherwise the
+        // summary screen reads a null session and reports zeros.
+        val exerciseCount = current.workout.exercises.size
+        val totalSets = current.workout.totalSets
+        val elapsedMinutes = ((System.currentTimeMillis() - current.startTime) / 60000L).toInt()
+        val points = totalSets * 5
+
         viewModelScope.launch {
-            val exerciseCount = _session.value?.workout?.exercises?.size ?: 0
-            val jackedPoints = exerciseCount * 10
             if (savedWorkoutId != -1L) {
-                workoutRepository.markCompleted(savedWorkoutId, jackedPoints)
+                workoutRepository.markCompleted(savedWorkoutId, points)
             }
-            userPreferencesRepository.recordCompletedSession(jackedPoints)
+            userPreferencesRepository.recordCompletedSession(points)
             _session.value = null
-            _isFinished.value = true
+            _summary.value = WorkoutSummary(
+                exerciseCount = exerciseCount,
+                totalSets = totalSets,
+                jackedPoints = points,
+                elapsedMinutes = elapsedMinutes
+            )
         }
     }
 }
+
+data class WorkoutSummary(
+    val exerciseCount: Int,
+    val totalSets: Int,
+    val jackedPoints: Int,
+    val elapsedMinutes: Int
+)

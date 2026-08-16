@@ -16,14 +16,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.makeforge.forgefit.domain.model.Workout
+import com.makeforge.forgefit.ui.components.SetsRepsExplainer
 import com.makeforge.forgefit.ui.theme.*
 import com.makeforge.forgefit.viewmodel.HomeViewModel
 import java.util.Calendar
 
 @Composable
 fun HomeScreen(
-    onStartWorkout: (Workout) -> Unit,
+    onStartWorkout: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -149,6 +149,11 @@ fun HomeScreen(
         Text("TODAY'S GRIND", style = MaterialTheme.typography.labelLarge, color = ForgeOnSurfaceDim)
         Spacer(Modifier.height(12.dp))
 
+        if (state.todayWorkout != null) {
+            SetsRepsExplainer()
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (state.todayWorkout == null) {
             Button(
                 onClick = { viewModel.generateTodayWorkout() },
@@ -182,19 +187,56 @@ fun HomeScreen(
                     Text("${workout.durationMinutes}min", style = MaterialTheme.typography.bodyMedium, color = ForgeOnSurfaceDim)
                 }
                 Spacer(Modifier.height(16.dp))
-                workout.exercises.take(4).forEach { exercise ->
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(exercise.name, style = MaterialTheme.typography.bodyMedium, color = ForgeOnSurface)
-                        Text("${exercise.sets}×${exercise.reps}", style = MaterialTheme.typography.bodyMedium, color = ForgeOrange, fontWeight = FontWeight.Bold)
+                Text(
+                    "${workout.exercises.size} exercises  ·  ${workout.totalSets} sets total",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = ForgeOnSurfaceDim
+                )
+                Spacer(Modifier.height(12.dp))
+                workout.exercises.forEachIndexed { index, exercise ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "${index + 1}. ${exercise.name}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = ForgeOnSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                exercise.muscleGroup,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ForgeOnSurfaceDim,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                "${exercise.sets} sets",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ForgeOrange,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "${exercise.reps} reps",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = ForgeOnSurfaceDim,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
-                    HorizontalDivider(color = ForgeSurfaceVariant, thickness = 0.5.dp)
-                }
-                if (workout.exercises.size > 4) {
-                    Text("+${workout.exercises.size - 4} more exercises", style = MaterialTheme.typography.bodyMedium, color = ForgeOnSurfaceDim, modifier = Modifier.padding(top = 8.dp))
+                    if (index < workout.exercises.size - 1) {
+                        HorizontalDivider(color = ForgeSurfaceVariant, thickness = 0.5.dp)
+                    }
                 }
                 Spacer(Modifier.height(20.dp))
                 Button(
-                    onClick = { onStartWorkout(workout) },
+                    onClick = { if (viewModel.handOffWorkout()) onStartWorkout() },
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ForgeOrange)

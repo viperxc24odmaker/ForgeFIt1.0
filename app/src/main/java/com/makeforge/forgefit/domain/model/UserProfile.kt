@@ -10,7 +10,9 @@ data class UserProfile(
     val availableEquipment: List<Equipment> = emptyList(),
     val jackedScore: Int = 0,
     val totalSessions: Int = 0,
-    val currentStreak: Int = 0
+    val currentStreak: Int = 0,
+    val totalJogs: Int = 0,
+    val totalDistanceKm: Float = 0f
 )
 
 enum class FitnessGoal(val displayName: String) {

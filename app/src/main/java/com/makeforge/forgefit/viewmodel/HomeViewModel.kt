@@ -3,6 +3,7 @@ package com.makeforge.forgefit.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.makeforge.forgefit.data.repository.UserPreferencesRepository
+import com.makeforge.forgefit.domain.ActiveWorkoutHolder
 import com.makeforge.forgefit.domain.model.*
 import com.makeforge.forgefit.network.WorkoutAiService
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,7 +14,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val workoutAiService: WorkoutAiService,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val activeWorkoutHolder: ActiveWorkoutHolder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -49,6 +51,13 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    /** Stages the generated workout so the active-workout screen can pick it up. */
+    fun handOffWorkout(): Boolean {
+        val workout = _uiState.value.todayWorkout ?: return false
+        activeWorkoutHolder.set(workout)
+        return true
     }
 
     fun clearError() = _uiState.update { it.copy(error = null) }
