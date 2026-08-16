@@ -17,7 +17,8 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"${project.findProperty("OPENROUTER_API_KEY") ?: ""}\"")
+        val apiKey = System.getenv("OPENROUTER_API_KEY") ?: project.findProperty("OPENROUTER_API_KEY")?.toString() ?: ""
+        buildConfigField("String", "OPENROUTER_API_KEY", "\"$apiKey\"")
     }
 
     buildTypes {
